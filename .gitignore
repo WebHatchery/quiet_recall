@@ -1,0 +1,12 @@
+.env*
+
+node_modules/
+vendor/
+
+frontend/dist/
+frontend/*.tsbuildinfo
+
+backend/vendor/
+backend/.last_vendor_hash
+
+*.log

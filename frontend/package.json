@@ -1,0 +1,51 @@
+{
+  "name": "@webhatchery/quiet-recall-frontend",
+  "version": "0.0.1",
+  "description": "Quiet Recall bedtime language-learning portal",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.12",
+    "axios": "^1.16.1",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^0.575.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^7.6.3",
+    "tailwindcss": "^4.1.12",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^25.2.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.40.0",
+    "@typescript-eslint/parser": "^8.40.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "eslint": "^9.39.2",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.26",
+    "globals": "^16.5.0",
+    "prettier": "^3.6.2",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.55.0",
+    "vite": "^6.4.1",
+    "vitest": "^3.2.4"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "ci": "npm run lint && npm run type-check && npm run format:check && npm run test:run && npm run build",
+    "ci:quick": "npm run lint && npm run type-check && npm run format:check"
+  }
+}
