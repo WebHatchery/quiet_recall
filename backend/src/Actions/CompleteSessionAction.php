@@ -16,14 +16,16 @@ final class CompleteSessionAction
     ) {
     }
 
-    public function execute(AuthUser $user, array $body): array
+    public function execute(AuthUser $user, array $body, string $idempotencyKey): array
     {
         $session = is_array($body['session'] ?? null) ? $body['session'] : [];
-        $state = $this->stateService->completeSession(
-            $this->repository->loadOrCreateState($user),
-            $session
+        return $this->repository->applyIntent(
+            $user,
+            $idempotencyKey,
+            'complete_session',
+            fn (array $state): array => [
+                'state' => $this->stateService->completeSession($state, $session),
+            ]
         );
-
-        return $this->repository->saveState($user, $state);
     }
 }

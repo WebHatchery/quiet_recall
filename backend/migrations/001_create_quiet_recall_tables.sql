@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS quiet_recall_saves (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     auth_user_id VARCHAR(128) NOT NULL,
     state_json JSON NOT NULL,
+    revision BIGINT UNSIGNED NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
     UNIQUE KEY uq_quiet_recall_saves_auth_user_id (auth_user_id),

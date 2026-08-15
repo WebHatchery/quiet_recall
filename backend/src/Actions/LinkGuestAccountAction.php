@@ -40,7 +40,11 @@ final class LinkGuestAccountAction
 
         return [
             'merged' => true,
-            'state' => $this->repository->moveGuestSaveToUser($guestUserId, $targetUser),
+            ...$this->repository->moveGuestSaveToUser(
+                $guestUserId,
+                $targetUser,
+                is_string($body['merge_strategy'] ?? null) ? $body['merge_strategy'] : ''
+            ),
         ];
     }
 }

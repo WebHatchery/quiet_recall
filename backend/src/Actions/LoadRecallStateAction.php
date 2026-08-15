@@ -15,6 +15,6 @@ final class LoadRecallStateAction
 
     public function execute(AuthUser $user): array
     {
-        return $this->repository->loadOrCreateState($user);
+        return $this->repository->loadOrCreateDocument($user);
     }
 }

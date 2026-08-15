@@ -2,7 +2,9 @@ import api, { toApiError } from "./client";
 import type { ApiEnvelope } from "./types";
 import type {
   CardRating,
+  PendingRecallIntent,
   RecallCard,
+  RecallDocument,
   RecallSnapshot,
   ReadingItem,
   StudySession,
@@ -15,13 +17,17 @@ async function request<T>(
   method: HttpMethod,
   url: string,
   payload?: unknown,
+  idempotencyKey?: string,
 ): Promise<T> {
+  const config = idempotencyKey
+    ? { headers: { "Idempotency-Key": idempotencyKey } }
+    : undefined;
   try {
     const response =
       method === "get"
         ? await api.get<ApiEnvelope<T>>(url)
         : method === "post"
-          ? await api.post<ApiEnvelope<T>>(url, payload)
+          ? await api.post<ApiEnvelope<T>>(url, payload, config)
           : method === "put"
             ? await api.put<ApiEnvelope<T>>(url, payload)
             : await api.delete<ApiEnvelope<T>>(url);
@@ -48,16 +54,31 @@ export const recallApi = {
       token: string;
       user: User;
     }>("post", "/auth/guest-session"),
-  linkGuestAccount: (guestToken: string) =>
+  linkGuestAccount: (
+    guestToken: string,
+    mergeStrategy: "merge" | "keep_guest" | "keep_account",
+  ) =>
     request<{
       merged: boolean;
       state: RecallSnapshot;
-    }>("post", "/auth/link-guest", { guest_token: guestToken }),
-  loadState: () => request<RecallSnapshot>("get", "/study/state"),
-  saveState: (snapshot: RecallSnapshot) =>
-    request<RecallSnapshot>("put", "/study/state", snapshot),
-  startSession: (minutes: number, tiredMode: boolean, newCardLimit: number) =>
-    request<{ state: RecallSnapshot; session: StudySession }>(
+      revision: number;
+    }>("post", "/auth/link-guest", {
+      guest_token: guestToken,
+      merge_strategy: mergeStrategy,
+    }),
+  loadState: () => request<RecallDocument>("get", "/study/state"),
+  importLegacyState: (snapshot: RecallSnapshot, expectedRevision: number) =>
+    request<RecallDocument>("put", "/study/state", {
+      state: snapshot,
+      expected_revision: expectedRevision,
+    }),
+  startSession: (
+    minutes: number,
+    tiredMode: boolean,
+    newCardLimit: number,
+    idempotencyKey: string,
+  ) =>
+    request<RecallDocument & { session: StudySession }>(
       "post",
       "/study/session/start",
       {
@@ -65,31 +86,75 @@ export const recallApi = {
         tired_mode: tiredMode,
         new_card_limit: newCardLimit,
       },
+      idempotencyKey,
     ),
-  reviewCard: (cardId: string, rating: CardRating) =>
-    request<{ state: RecallSnapshot; card: RecallCard }>(
+  reviewCard: (cardId: string, rating: CardRating, idempotencyKey: string) =>
+    request<RecallDocument & { card: RecallCard }>(
       "post",
       "/study/card/review",
       {
         card_id: cardId,
         rating,
       },
+      idempotencyKey,
     ),
-  completeReading: (readingId: string) =>
-    request<{ state: RecallSnapshot; reading: ReadingItem }>(
+  completeReading: (readingId: string, idempotencyKey: string) =>
+    request<RecallDocument & { reading: ReadingItem }>(
       "post",
       "/study/reading/complete",
       {
         reading_id: readingId,
       },
+      idempotencyKey,
     ),
-  saveSentence: (prompt: string, text: string) =>
-    request<RecallSnapshot>("post", "/study/sentence", {
-      prompt,
-      text,
-    }),
-  completeSession: (session: StudySession) =>
-    request<RecallSnapshot>("post", "/study/session/complete", {
-      session,
-    }),
+  saveSentence: (prompt: string, text: string, idempotencyKey: string) =>
+    request<RecallDocument>(
+      "post",
+      "/study/sentence",
+      {
+        prompt,
+        text,
+      },
+      idempotencyKey,
+    ),
+  completeSession: (session: StudySession, idempotencyKey: string) =>
+    request<RecallDocument>(
+      "post",
+      "/study/session/complete",
+      {
+        session,
+      },
+      idempotencyKey,
+    ),
+  sendIntent: (intent: PendingRecallIntent) => {
+    const payload = intent.payload;
+    switch (intent.kind) {
+      case "start_session":
+        return recallApi.startSession(
+          Number(payload.minutes),
+          Boolean(payload.tired_mode),
+          Number(payload.new_card_limit),
+          intent.id,
+        );
+      case "review_card":
+        return recallApi.reviewCard(
+          String(payload.card_id),
+          payload.rating as CardRating,
+          intent.id,
+        );
+      case "complete_reading":
+        return recallApi.completeReading(String(payload.reading_id), intent.id);
+      case "save_sentence":
+        return recallApi.saveSentence(
+          String(payload.prompt ?? ""),
+          String(payload.text ?? ""),
+          intent.id,
+        );
+      case "complete_session":
+        return recallApi.completeSession(
+          payload.session as unknown as StudySession,
+          intent.id,
+        );
+    }
+  },
 };

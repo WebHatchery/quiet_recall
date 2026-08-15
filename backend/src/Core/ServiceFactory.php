@@ -14,6 +14,7 @@ use App\Actions\SaveSentenceAction;
 use App\Actions\StartSessionAction;
 use App\Controllers\AuthController;
 use App\Controllers\HealthController;
+use App\Controllers\GuestLinkController;
 use App\Controllers\RecallController;
 use App\Repositories\RecallRepository;
 use App\Services\RecallStateService;
@@ -30,7 +31,8 @@ final class ServiceFactory
     {
         return match ($className) {
             HealthController::class => new HealthController(),
-            AuthController::class => new AuthController(
+            AuthController::class => new AuthController(),
+            GuestLinkController::class => new GuestLinkController(
                 new LinkGuestAccountAction($this->recallRepository())
             ),
             RecallController::class => new RecallController(

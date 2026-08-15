@@ -181,6 +181,74 @@ final class RecallStateService
         ];
     }
 
+    public function mergeStates(array $accountState, array $guestState): array
+    {
+        $account = $this->normalizeState($accountState);
+        $guest = $this->normalizeState($guestState);
+
+        $cards = [];
+        foreach (array_merge($account['cards'], $guest['cards']) as $card) {
+            $id = (string) ($card['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            if (!isset($cards[$id]) || (int) ($card['reviews'] ?? 0) > (int) ($cards[$id]['reviews'] ?? 0)) {
+                $cards[$id] = $card;
+            }
+        }
+
+        $readings = [];
+        foreach (array_merge($account['readings'], $guest['readings']) as $reading) {
+            $id = (string) ($reading['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            if (!isset($readings[$id]) || ($reading['completedAt'] ?? null) !== null) {
+                $readings[$id] = $reading;
+            }
+        }
+
+        $accountProgress = $account['progress'];
+        $guestProgress = $guest['progress'];
+        $sentences = [];
+        foreach (array_merge($accountProgress['typedSentences'], $guestProgress['typedSentences']) as $sentence) {
+            $sentences[(string) ($sentence['id'] ?? hash('sha256', json_encode($sentence)))] = $sentence;
+        }
+        usort(
+            $sentences,
+            static fn (array $left, array $right): int =>
+                strcmp((string) ($right['savedAt'] ?? ''), (string) ($left['savedAt'] ?? ''))
+        );
+
+        $progress = $accountProgress;
+        foreach (['reviewedByDate', 'correctByDate'] as $historyKey) {
+            $progress[$historyKey] = $accountProgress[$historyKey];
+            foreach ($guestProgress[$historyKey] as $date => $count) {
+                $progress[$historyKey][$date] = max((int) ($progress[$historyKey][$date] ?? 0), (int) $count);
+            }
+        }
+        $progress['totalCardsReviewed'] = array_sum($progress['reviewedByDate']);
+        $progress['totalCorrect'] = array_sum($progress['correctByDate']);
+        $progress['totalHard'] = max(0, $progress['totalCardsReviewed'] - $progress['totalCorrect']);
+        $progress['completedNightDates'] = array_values(array_unique(array_merge(
+            $accountProgress['completedNightDates'],
+            $guestProgress['completedNightDates']
+        )));
+        $progress['completedReadingIds'] = array_values(array_unique(array_merge(
+            $accountProgress['completedReadingIds'],
+            $guestProgress['completedReadingIds']
+        )));
+        $progress['typedSentences'] = array_slice(array_values($sentences), 0, 20);
+
+        return $this->normalizeState([
+            'cards' => array_values($cards),
+            'readings' => array_values($readings),
+            'sentenceTemplates' => $account['sentenceTemplates'],
+            'settings' => $account['settings'],
+            'progress' => $progress,
+        ]);
+    }
+
     public function startSession(array $state, int $minutes, bool $tiredMode, int $newCardLimit): array
     {
         $state = $this->normalizeState($state);

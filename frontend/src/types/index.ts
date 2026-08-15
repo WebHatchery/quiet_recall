@@ -147,6 +147,25 @@ export interface RecallSnapshot {
   progress: RecallProgress;
 }
 
+export interface RecallDocument {
+  state: RecallSnapshot;
+  revision: number;
+}
+
+export type RecallIntentKind =
+  | "start_session"
+  | "review_card"
+  | "complete_reading"
+  | "save_sentence"
+  | "complete_session";
+
+export interface PendingRecallIntent {
+  id: string;
+  kind: RecallIntentKind;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface ProgressSummary {
   reviewedToday: number;
   reviewAccuracy: number;

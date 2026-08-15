@@ -4,19 +4,13 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
-use App\Actions\LinkGuestAccountAction;
 use App\Core\Env;
 use App\Core\Request;
 use App\Core\Response;
-use App\Models\AuthUser;
 use Firebase\JWT\JWT;
 
 final class AuthController
 {
-    public function __construct(private readonly LinkGuestAccountAction $linkGuestAccountAction)
-    {
-    }
-
     public function loginInfo(Request $request, Response $response): void
     {
         $response->success([
@@ -29,6 +23,10 @@ final class AuthController
         $guestId = 'guest_' . bin2hex(random_bytes(16));
         $username = 'Guest ' . strtoupper(substr($guestId, -6));
         $issuedAt = time();
+        $ttl = filter_var(Env::required('GUEST_SESSION_TTL_SECONDS'), FILTER_VALIDATE_INT);
+        if ($ttl === false || $ttl < 300) {
+            throw new \RuntimeException('GUEST_SESSION_TTL_SECONDS must be at least 300.');
+        }
         $payload = [
             'sub' => $guestId,
             'user_id' => $guestId,
@@ -39,6 +37,8 @@ final class AuthController
             'auth_type' => 'guest',
             'is_guest' => true,
             'iat' => $issuedAt,
+            'nbf' => $issuedAt,
+            'exp' => $issuedAt + $ttl,
         ];
 
         $response->success([
@@ -52,13 +52,5 @@ final class AuthController
                 'auth_type' => 'guest',
             ],
         ]);
-    }
-
-    public function linkGuest(Request $request, Response $response): void
-    {
-        $response->success($this->linkGuestAccountAction->execute(
-            AuthUser::fromArray($request->getAttribute('auth_user', [])),
-            $request->getBody()
-        ));
     }
 }

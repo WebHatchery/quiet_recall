@@ -17,22 +17,18 @@ final class CompleteReadingAction
     ) {
     }
 
-    public function execute(AuthUser $user, array $body): array
+    public function execute(AuthUser $user, array $body, string $idempotencyKey): array
     {
         $readingId = $body['reading_id'] ?? null;
         if (!is_string($readingId)) {
             throw new DomainException('Reading id is required.');
         }
 
-        $result = $this->stateService->completeReading(
-            $this->repository->loadOrCreateState($user),
-            $readingId
+        return $this->repository->applyIntent(
+            $user,
+            $idempotencyKey,
+            'complete_reading',
+            fn (array $state): array => $this->stateService->completeReading($state, $readingId)
         );
-        $state = $this->repository->saveState($user, $result['state']);
-
-        return [
-            'state' => $state,
-            'reading' => $result['reading'],
-        ];
     }
 }

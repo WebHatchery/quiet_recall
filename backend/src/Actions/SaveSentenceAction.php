@@ -16,14 +16,19 @@ final class SaveSentenceAction
     ) {
     }
 
-    public function execute(AuthUser $user, array $body): array
+    public function execute(AuthUser $user, array $body, string $idempotencyKey): array
     {
-        $state = $this->stateService->saveSentence(
-            $this->repository->loadOrCreateState($user),
-            isset($body['prompt']) ? (string) $body['prompt'] : '',
-            isset($body['text']) ? (string) $body['text'] : ''
+        return $this->repository->applyIntent(
+            $user,
+            $idempotencyKey,
+            'save_sentence',
+            fn (array $state): array => [
+                'state' => $this->stateService->saveSentence(
+                    $state,
+                    isset($body['prompt']) ? (string) $body['prompt'] : '',
+                    isset($body['text']) ? (string) $body['text'] : ''
+                ),
+            ]
         );
-
-        return $this->repository->saveState($user, $state);
     }
 }

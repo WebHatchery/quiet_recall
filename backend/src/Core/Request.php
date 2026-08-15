@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Core;
 
+use DomainException;
+use RuntimeException;
+
 final class Request
 {
     private array $body;
@@ -59,12 +62,26 @@ final class Request
 
     private function parseBody(): array
     {
+        $maxBytes = filter_var(Env::required('MAX_REQUEST_BYTES'), FILTER_VALIDATE_INT);
+        if ($maxBytes === false || $maxBytes < 1024) {
+            throw new RuntimeException('MAX_REQUEST_BYTES must be an integer of at least 1024.');
+        }
+        $contentLength = filter_var($_SERVER['CONTENT_LENGTH'] ?? 0, FILTER_VALIDATE_INT);
+        if ($contentLength !== false && $contentLength > $maxBytes) {
+            throw new DomainException('Request payload is too large.');
+        }
+
         $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
         if (str_contains((string) $contentType, 'application/json')) {
             $body = file_get_contents('php://input');
+            if (is_string($body) && strlen($body) > $maxBytes) {
+                throw new DomainException('Request payload is too large.');
+            }
             $decoded = json_decode($body ?: '[]', true);
-
-            return is_array($decoded) ? $decoded : [];
+            if (!is_array($decoded) || json_last_error() !== JSON_ERROR_NONE) {
+                throw new DomainException('Request body must be valid JSON.');
+            }
+            return $decoded;
         }
 
         return $_POST;

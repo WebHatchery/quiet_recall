@@ -57,7 +57,10 @@ try {
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'OPTIONS') {
     header('Access-Control-Allow-Origin: ' . $allowedOrigin);
-    header('Access-Control-Allow-Headers: X-Requested-With, Content-Type, Accept, Origin, Authorization');
+    header(
+        'Access-Control-Allow-Headers: X-Requested-With, Content-Type, Accept, Origin, ' .
+        'Authorization, Idempotency-Key'
+    );
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS');
     header('Access-Control-Max-Age: 86400');
     exit(0);

@@ -7,6 +7,8 @@ namespace App\Core;
 use DomainException;
 use RuntimeException;
 use Throwable;
+use App\Core\ConflictException;
+use PDOException;
 
 final class Router
 {
@@ -73,10 +75,10 @@ final class Router
             }
 
             $routeParams = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
-            $request = new Request($routeParams);
             $response = new Response();
 
             try {
+                $request = new Request($routeParams);
                 foreach ($route['middleware'] as $middlewareClass) {
                     $middleware = new $middlewareClass();
                     $result = $middleware($request, $response);
@@ -100,8 +102,14 @@ final class Router
                 $methodName = $route['handler'][1];
                 $controller->$methodName($request, $response);
                 return;
+            } catch (ConflictException $exception) {
+                $response->error($exception->getMessage(), 409, ['code' => 'revision_conflict']);
+                return;
             } catch (DomainException $exception) {
                 $response->error($exception->getMessage(), 422);
+                return;
+            } catch (PDOException) {
+                $response->error('Study service database is unavailable.', 503);
                 return;
             } catch (RuntimeException $exception) {
                 $response->error($exception->getMessage(), 400);

@@ -17,7 +17,7 @@ final class ReviewCardAction
     ) {
     }
 
-    public function execute(AuthUser $user, array $body): array
+    public function execute(AuthUser $user, array $body, string $idempotencyKey): array
     {
         $cardId = $body['card_id'] ?? null;
         $rating = $body['rating'] ?? null;
@@ -25,16 +25,11 @@ final class ReviewCardAction
             throw new DomainException('Card id and rating are required.');
         }
 
-        $result = $this->stateService->reviewCard(
-            $this->repository->loadOrCreateState($user),
-            $cardId,
-            $rating
+        return $this->repository->applyIntent(
+            $user,
+            $idempotencyKey,
+            'review_card',
+            fn (array $state): array => $this->stateService->reviewCard($state, $cardId, $rating)
         );
-        $state = $this->repository->saveState($user, $result['state']);
-
-        return [
-            'state' => $state,
-            'card' => $result['card'],
-        ];
     }
 }

@@ -16,19 +16,21 @@ final class StartSessionAction
     ) {
     }
 
-    public function execute(AuthUser $user, array $body): array
+    public function execute(AuthUser $user, array $body, string $idempotencyKey): array
     {
-        $state = $this->repository->loadOrCreateState($user);
-        $session = $this->stateService->startSession(
-            $state,
-            (int) ($body['minutes'] ?? 5),
-            (bool) ($body['tired_mode'] ?? false),
-            (int) ($body['new_card_limit'] ?? 2)
+        return $this->repository->applyIntent(
+            $user,
+            $idempotencyKey,
+            'start_session',
+            fn (array $state): array => [
+                'state' => $state,
+                'session' => $this->stateService->startSession(
+                    $state,
+                    (int) ($body['minutes'] ?? 5),
+                    (bool) ($body['tired_mode'] ?? false),
+                    (int) ($body['new_card_limit'] ?? 2)
+                ),
+            ]
         );
-
-        return [
-            'state' => $state,
-            'session' => $session,
-        ];
     }
 }

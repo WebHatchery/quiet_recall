@@ -45,7 +45,8 @@ final class RecallController
     {
         $response->success($this->startSessionAction->execute(
             $this->user($request),
-            $request->getBody()
+            $request->getBody(),
+            $this->idempotencyKey($request)
         ));
     }
 
@@ -53,7 +54,8 @@ final class RecallController
     {
         $response->success($this->reviewCardAction->execute(
             $this->user($request),
-            $request->getBody()
+            $request->getBody(),
+            $this->idempotencyKey($request)
         ));
     }
 
@@ -61,7 +63,8 @@ final class RecallController
     {
         $response->success($this->completeReadingAction->execute(
             $this->user($request),
-            $request->getBody()
+            $request->getBody(),
+            $this->idempotencyKey($request)
         ));
     }
 
@@ -69,7 +72,8 @@ final class RecallController
     {
         $response->success($this->saveSentenceAction->execute(
             $this->user($request),
-            $request->getBody()
+            $request->getBody(),
+            $this->idempotencyKey($request)
         ));
     }
 
@@ -77,12 +81,18 @@ final class RecallController
     {
         $response->success($this->completeSessionAction->execute(
             $this->user($request),
-            $request->getBody()
+            $request->getBody(),
+            $this->idempotencyKey($request)
         ));
     }
 
     private function user(Request $request): AuthUser
     {
         return AuthUser::fromArray($request->getAttribute('auth_user', []));
+    }
+
+    private function idempotencyKey(Request $request): string
+    {
+        return trim((string) $request->getHeader('Idempotency-Key'));
     }
 }

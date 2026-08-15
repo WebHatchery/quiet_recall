@@ -20,10 +20,12 @@ import {
 import type {
   CardDraft,
   CardRating,
+  PendingRecallIntent,
   ProgressSummary,
   ReadingDraft,
   ReadingItem,
   RecallCard,
+  RecallDocument,
   RecallProgress,
   RecallSettings,
   RecallSnapshot,
@@ -37,6 +39,10 @@ import { scheduleCard, selectSessionCardIds } from "../utils/srs";
 export type PortalView = "tonight" | "progress" | "library";
 
 interface RecallStoreState extends RecallSnapshot {
+  revision: number;
+  pendingIntents: PendingRecallIntent[];
+  legacyImportPending: boolean;
+  isFlushingIntents: boolean;
   activeView: PortalView;
   activeSession: StudySession | null;
   tiredMode: boolean;
@@ -54,7 +60,12 @@ interface RecallStoreState extends RecallSnapshot {
   setSelectedMinutes: (minutes: number) => void;
   refreshAuthStatus: () => void;
   continueAsGuest: () => Promise<void>;
-  mergeGuestSession: () => Promise<void>;
+  mergeGuestSession: (
+    strategy: "merge" | "keep_guest" | "keep_account",
+  ) => Promise<void>;
+  importLegacyProgress: () => Promise<void>;
+  discardLegacyProgress: () => Promise<void>;
+  flushPendingIntents: () => Promise<void>;
   visitWebHatcheryLogin: () => Promise<void>;
   loadRemoteState: () => Promise<void>;
   startSession: () => void;
@@ -86,6 +97,10 @@ export const useRecallStore = create<RecallStoreState>()(
   persist(
     (set, get) => ({
       ...initialSnapshot,
+      revision: 0,
+      pendingIntents: [],
+      legacyImportPending: false,
+      isFlushingIntents: false,
       activeView: "tonight",
       activeSession: null,
       tiredMode: false,
@@ -124,9 +139,11 @@ export const useRecallStore = create<RecallStoreState>()(
         try {
           const session = await recallApi.createGuestSession();
           saveGuestSession(session.token, session.user);
-          const snapshot = snapshotFromState(get());
-          await recallApi.saveState(snapshot);
+          const document = await recallApi.loadState();
+          const preserveLegacyState = get().legacyImportPending;
           set({
+            ...(preserveLegacyState ? {} : document.state),
+            revision: document.revision,
             ...authStatus(),
             isSyncing: false,
             syncError: null,
@@ -140,7 +157,7 @@ export const useRecallStore = create<RecallStoreState>()(
         }
       },
 
-      mergeGuestSession: async () => {
+      mergeGuestSession: async (strategy) => {
         const guestToken = readGuestSession()?.token;
         if (!guestToken) {
           set(authStatus());
@@ -149,10 +166,14 @@ export const useRecallStore = create<RecallStoreState>()(
 
         set({ isSyncing: true, syncError: null });
         try {
-          const payload = await recallApi.linkGuestAccount(guestToken);
+          const payload = await recallApi.linkGuestAccount(
+            guestToken,
+            strategy,
+          );
           clearGuestSession();
           set({
             ...payload.state,
+            revision: payload.revision,
             ...authStatus(),
             isSyncing: false,
             syncError: null,
@@ -186,13 +207,15 @@ export const useRecallStore = create<RecallStoreState>()(
 
         set({ isSyncing: true, syncError: null });
         try {
-          const snapshot = await recallApi.loadState();
+          const document = await recallApi.loadState();
           set({
-            ...snapshot,
+            ...document.state,
+            revision: document.revision,
             ...authStatus(),
             isSyncing: false,
             syncError: null,
           });
+          await get().flushPendingIntents();
         } catch (error: unknown) {
           set({
             ...authStatus(),
@@ -201,6 +224,34 @@ export const useRecallStore = create<RecallStoreState>()(
           });
         }
       },
+
+      importLegacyProgress: async () => {
+        if (!readAuthToken() || get().revision < 1) {
+          return;
+        }
+        set({ isSyncing: true, syncError: null });
+        try {
+          const document = await recallApi.importLegacyState(
+            snapshotFromState(get()),
+            get().revision,
+          );
+          set({
+            ...document.state,
+            revision: document.revision,
+            legacyImportPending: false,
+            isSyncing: false,
+          });
+        } catch (error: unknown) {
+          set({ isSyncing: false, syncError: messageFromError(error) });
+        }
+      },
+
+      discardLegacyProgress: async () => {
+        set({ legacyImportPending: false });
+        await get().loadRemoteState();
+      },
+
+      flushPendingIntents: () => flushIntentQueue(get, set),
 
       startSession: () => {
         const state = get();
@@ -241,6 +292,12 @@ export const useRecallStore = create<RecallStoreState>()(
         set({
           activeView: "tonight",
           activeSession,
+        });
+
+        void enqueueIntent(get, set, "start_session", {
+          minutes,
+          tired_mode: state.tiredMode,
+          new_card_limit: state.settings.newCardLimit,
         });
 
         if (step === "done") {
@@ -317,7 +374,10 @@ export const useRecallStore = create<RecallStoreState>()(
           },
         }));
 
-        void pushSnapshot(get, set);
+        void enqueueIntent(get, set, "review_card", {
+          card_id: cardId,
+          rating,
+        });
 
         if (nextStep === "done") {
           get().finishSession();
@@ -344,7 +404,9 @@ export const useRecallStore = create<RecallStoreState>()(
           },
         }));
 
-        void pushSnapshot(get, set);
+        void enqueueIntent(get, set, "complete_reading", {
+          reading_id: readingId,
+        });
 
         if (get().activeSession?.step === "done") {
           get().finishSession();
@@ -379,7 +441,10 @@ export const useRecallStore = create<RecallStoreState>()(
           },
         }));
 
-        void pushSnapshot(get, set);
+        void enqueueIntent(get, set, "save_sentence", {
+          prompt: template?.prompt ?? "Typed sentence",
+          text: text.trim(),
+        });
         get().finishSession();
       },
 
@@ -422,7 +487,7 @@ export const useRecallStore = create<RecallStoreState>()(
           },
         }));
 
-        void pushSnapshot(get, set);
+        void enqueueIntent(get, set, "complete_session", { session });
       },
 
       closeForTonight: () => {
@@ -443,7 +508,6 @@ export const useRecallStore = create<RecallStoreState>()(
             settings.customSessionMinutes ??
             state.selectedMinutes,
         }));
-        void pushSnapshot(get, set);
       },
 
       saveCard: (draft) => {
@@ -482,7 +546,6 @@ export const useRecallStore = create<RecallStoreState>()(
               : [nextCard, ...state.cards],
           };
         });
-        void pushSnapshot(get, set);
       },
 
       deleteCard: (cardId) => {
@@ -493,7 +556,6 @@ export const useRecallStore = create<RecallStoreState>()(
               ? null
               : state.activeSession,
         }));
-        void pushSnapshot(get, set);
       },
 
       saveReading: (draft) => {
@@ -523,7 +585,6 @@ export const useRecallStore = create<RecallStoreState>()(
               : [nextReading, ...state.readings],
           };
         });
-        void pushSnapshot(get, set);
       },
 
       deleteReading: (readingId) => {
@@ -538,7 +599,6 @@ export const useRecallStore = create<RecallStoreState>()(
             ),
           },
         }));
-        void pushSnapshot(get, set);
       },
 
       resetLocalData: () => {
@@ -548,7 +608,6 @@ export const useRecallStore = create<RecallStoreState>()(
           selectedMinutes: defaultSettings.defaultSessionMinutes,
           tiredMode: false,
         });
-        void pushSnapshot(get, set);
       },
     }),
     {
@@ -563,7 +622,28 @@ export const useRecallStore = create<RecallStoreState>()(
         activeSession: state.activeSession,
         tiredMode: state.tiredMode,
         selectedMinutes: state.selectedMinutes,
+        revision: state.revision,
+        pendingIntents: state.pendingIntents,
+        legacyImportPending: state.legacyImportPending,
       }),
+      version: 1,
+      migrate: (persistedState, version) => {
+        const persisted = persistedState as Partial<RecallStoreState>;
+        if (version === 0) {
+          return {
+            ...persisted,
+            revision: 0,
+            pendingIntents: [],
+            legacyImportPending: true,
+          } as RecallStoreState;
+        }
+        return persisted as RecallStoreState;
+      },
+      onRehydrateStorage: () => (state) => {
+        if (state && state.pendingIntents.length > 0) {
+          queueMicrotask(() => void state.flushPendingIntents());
+        }
+      },
     },
   ),
 );
@@ -578,20 +658,100 @@ function snapshotFromState(state: RecallStoreState): RecallSnapshot {
   };
 }
 
-async function pushSnapshot(
+type RecallStoreSet = (
+  partial:
+    | Partial<RecallStoreState>
+    | ((state: RecallStoreState) => Partial<RecallStoreState>),
+) => void;
+
+async function enqueueIntent(
   get: () => RecallStoreState,
-  set: (partial: Partial<RecallStoreState>) => void,
+  set: RecallStoreSet,
+  kind: PendingRecallIntent["kind"],
+  payload: Record<string, unknown>,
 ): Promise<void> {
   if (!readAuthToken()) {
     return;
   }
 
-  set({ isSyncing: true, syncError: null });
-  try {
-    await recallApi.saveState(snapshotFromState(get()));
-    set({ isSyncing: false, syncError: null });
-  } catch (error: unknown) {
-    set({ isSyncing: false, syncError: messageFromError(error) });
+  const intent: PendingRecallIntent = {
+    id: crypto.randomUUID(),
+    kind,
+    payload,
+    createdAt: nowIso(),
+  };
+  set((state) => ({ pendingIntents: [...state.pendingIntents, intent] }));
+  await flushIntentQueue(get, set);
+}
+
+async function flushIntentQueue(
+  get: () => RecallStoreState,
+  set: RecallStoreSet,
+): Promise<void> {
+  if (!readAuthToken() || get().isFlushingIntents) {
+    return;
+  }
+
+  set({ isFlushingIntents: true, isSyncing: true, syncError: null });
+  while (get().pendingIntents.length > 0) {
+    const intent = get().pendingIntents[0];
+    try {
+      const response = await recallApi.sendIntent(intent);
+      set((state) => ({
+        ...applyIntentResponse(state, intent, response),
+        revision: response.revision,
+        pendingIntents: state.pendingIntents.filter(
+          (candidate) => candidate.id !== intent.id,
+        ),
+        syncError: null,
+      }));
+    } catch (error: unknown) {
+      set({ syncError: messageFromError(error) });
+      break;
+    }
+  }
+  set({ isFlushingIntents: false, isSyncing: false });
+}
+
+function applyIntentResponse(
+  state: RecallStoreState,
+  intent: PendingRecallIntent,
+  response: RecallDocument & {
+    card?: unknown;
+    reading?: unknown;
+    session?: unknown;
+  },
+): Partial<RecallStoreState> {
+  switch (intent.kind) {
+    case "start_session":
+      return response.session && state.activeSession?.reviewedCount === 0
+        ? { activeSession: response.session as StudySession }
+        : {};
+    case "review_card": {
+      const card = response.card as RecallCard | undefined;
+      return {
+        cards: card
+          ? state.cards.map((candidate) =>
+              candidate.id === card.id ? card : candidate,
+            )
+          : state.cards,
+        progress: response.state.progress,
+      };
+    }
+    case "complete_reading": {
+      const reading = response.reading as ReadingItem | undefined;
+      return {
+        readings: reading
+          ? state.readings.map((candidate) =>
+              candidate.id === reading.id ? reading : candidate,
+            )
+          : state.readings,
+        progress: response.state.progress,
+      };
+    }
+    case "save_sentence":
+    case "complete_session":
+      return { progress: response.state.progress };
   }
 }
 
@@ -683,4 +843,10 @@ function withReturnTo(loginUrl: string): string {
   const url = new URL(normalized, window.location.origin);
   url.searchParams.set("return_to", window.location.href);
   return url.toString();
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("online", () => {
+    void useRecallStore.getState().flushPendingIntents();
+  });
 }
