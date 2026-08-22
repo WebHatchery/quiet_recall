@@ -1,6 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { registerUnauthorizedCallback } from "../api/client";
+import { readFrontpageToken, readFrontpageUser } from "@webhatchery/auth-react";
 import type { User } from "../types";
 
 interface AuthState {
@@ -12,24 +11,13 @@ interface AuthState {
   logout: () => void;
 }
 
-const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      user: null,
-      token: null,
-      loginUrl: null,
-      setAuth: (user, token) => set({ user, token }),
-      setLoginUrl: (loginUrl) => set({ loginUrl }),
-      logout: () => set({ user: null, token: null }),
-    }),
-    {
-      name: "auth-storage",
-    },
-  ),
-);
-
-registerUnauthorizedCallback((loginUrl) => {
-  useAuthStore.getState().setLoginUrl(loginUrl);
-});
+const useAuthStore = create<AuthState>()((set) => ({
+  user: readFrontpageUser() as User | null,
+  token: readFrontpageToken(),
+  loginUrl: null,
+  setAuth: (user, token) => set({ user, token }),
+  setLoginUrl: (loginUrl) => set({ loginUrl }),
+  logout: () => set({ user: null, token: null }),
+}));
 
 export { useAuthStore };

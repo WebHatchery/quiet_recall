@@ -61,7 +61,7 @@ interface RecallStoreState extends RecallSnapshot {
   refreshAuthStatus: () => void;
   continueAsGuest: () => Promise<void>;
   mergeGuestSession: (
-    strategy: "merge" | "keep_guest" | "keep_account",
+    strategy: "merge" | "guest_wins" | "keep_account",
   ) => Promise<void>;
   importLegacyProgress: () => Promise<void>;
   discardLegacyProgress: () => Promise<void>;

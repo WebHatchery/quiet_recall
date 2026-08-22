@@ -2,7 +2,6 @@ import axios from "axios";
 import { requiredEnv } from "./env";
 import { ApiError } from "./types";
 import {
-  persistLoginUrl,
   readAuthToken,
   readFrontpageToken,
   readGuestSession,
@@ -52,10 +51,8 @@ api.interceptors.response.use(
 
     if (maybeAxiosError.response?.status === 401) {
       const loginUrl = maybeAxiosError.response.data?.login_url ?? null;
-      if (loginUrl) {
-        persistLoginUrl(loginUrl);
-      }
-      onUnauthorized?.(loginUrl);
+      void onUnauthorized;
+      void loginUrl;
     }
 
     return Promise.reject(error);

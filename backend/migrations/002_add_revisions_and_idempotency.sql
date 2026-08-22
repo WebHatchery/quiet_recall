@@ -1,6 +1,3 @@
-ALTER TABLE quiet_recall_saves
-    ADD COLUMN IF NOT EXISTS revision BIGINT UNSIGNED NOT NULL DEFAULT 1 AFTER state_json;
-
 CREATE TABLE IF NOT EXISTS quiet_recall_idempotency_keys (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     auth_user_id VARCHAR(128) NOT NULL,

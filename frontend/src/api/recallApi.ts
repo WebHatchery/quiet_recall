@@ -56,7 +56,7 @@ export const recallApi = {
     }>("post", "/auth/guest-session"),
   linkGuestAccount: (
     guestToken: string,
-    mergeStrategy: "merge" | "keep_guest" | "keep_account",
+    mergeStrategy: "merge" | "guest_wins" | "keep_account",
   ) =>
     request<{
       merged: boolean;
@@ -64,7 +64,7 @@ export const recallApi = {
       revision: number;
     }>("post", "/auth/link-guest", {
       guest_token: guestToken,
-      merge_strategy: mergeStrategy,
+      merge_strategy: mergeStrategy === "guest_wins" ? "keep_guest" : mergeStrategy,
     }),
   loadState: () => request<RecallDocument>("get", "/study/state"),
   importLegacyState: (snapshot: RecallSnapshot, expectedRevision: number) =>

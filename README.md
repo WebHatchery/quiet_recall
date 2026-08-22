@@ -134,7 +134,7 @@ rather than silently falling back.
 | `CORS_ORIGIN` | allowed browser origin |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | MySQL connection |
 | `JWT_SECRET` | shared WebHatchery token verification and guest token signing |
-| `WEB_HATCHERY_LOGIN_URL` | returned to the client for the login prompt |
+| `WEBHATCHERY_LOGIN_URL` | returned to the client for the login prompt |
 
 `frontend/.env`: `VITE_API_BASE_URL`, `VITE_APP_NAME`, `VITE_BASE_PATH`.
 

@@ -59,7 +59,7 @@ final class WebHatcheryJwtMiddleware
     private function unauthorized(Response $response): Response
     {
         $response->error('Authentication required', 401, [
-            'login_url' => Env::required('WEB_HATCHERY_LOGIN_URL'),
+            'login_url' => Env::required('WEBHATCHERY_LOGIN_URL'),
         ]);
 
         return $response;

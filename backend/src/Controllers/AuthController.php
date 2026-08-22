@@ -14,7 +14,7 @@ final class AuthController
     public function loginInfo(Request $request, Response $response): void
     {
         $response->success([
-            'login_url' => Env::required('WEB_HATCHERY_LOGIN_URL'),
+            'login_url' => Env::required('WEBHATCHERY_LOGIN_URL'),
         ]);
     }
 

@@ -92,7 +92,7 @@ export function AccountPanel() {
               <button
                 type="button"
                 className="min-h-10 rounded-md border border-stone-600 px-3 text-sm text-stone-100"
-                onClick={() => void mergeGuestSession("keep_guest")}
+                onClick={() => void mergeGuestSession("guest_wins")}
                 disabled={isSyncing}
               >
                 Use Guest Progress
