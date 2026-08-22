@@ -154,7 +154,7 @@ do **not** run `npm install` inside `frontend/`.
 
 ```powershell
 # from D:\WebHatchery
-npm install
+npm ci
 npm -w @webhatchery/quiet-recall-frontend run dev     # dev server, diagnostics only
 ```
 

@@ -1,88 +1,52 @@
-import axios from "axios";
-import { requiredEnv } from "./env";
-import { ApiError } from "./types";
-import {
-  readAuthToken,
-  readFrontpageToken,
-  readGuestSession,
-} from "./sessionStorage";
+import { ApiError as SharedApiError, createApiClient, type QueryParams } from '@webhatchery/api-client';
+import { requiredEnv } from './env';
+import { ApiError } from './types';
+import { readAuthToken, readFrontpageToken, readGuestSession } from './sessionStorage';
 
-const api = axios.create({
-  baseURL: requiredEnv("VITE_API_BASE_URL"),
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
+type RequestConfig = { params?: QueryParams; headers?: HeadersInit };
+type ApiResponse<T> = { data: T; status: number };
 let onUnauthorized: ((loginUrl: string | null) => void) | null = null;
 
-export const registerUnauthorizedCallback = (
-  callback: (loginUrl: string | null) => void,
-) => {
+export const registerUnauthorizedCallback = (callback: (loginUrl: string | null) => void): void => {
   onUnauthorized = callback;
 };
 
-api.interceptors.request.use((config) => {
-  const frontpageToken = readFrontpageToken();
-  const guestToken = readGuestSession()?.token;
-  const token = frontpageToken ?? guestToken ?? readAuthToken();
-
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
-  return config;
+const sharedApi = createApiClient({
+  baseURL: requiredEnv('VITE_API_BASE_URL'),
+  preserveEnvelope: true,
+  tokenProvider: () => readFrontpageToken() ?? readGuestSession()?.token ?? readAuthToken(),
+  onUnauthorized: (error) => {
+    onUnauthorized?.(
+      error instanceof SharedApiError ? error.loginUrl ?? null : null,
+    );
+  },
 });
 
-api.interceptors.response.use(
-  (response) => response,
-  (error: unknown) => {
-    const maybeAxiosError = error as {
-      response?: {
-        status?: number;
-        data?: {
-          error?: string;
-          message?: string;
-          login_url?: string;
-        };
-      };
-      message?: string;
-    };
+const request = async <T>(method: string, endpoint: string, body?: unknown, config?: RequestConfig): Promise<ApiResponse<T>> => ({
+  data: await sharedApi.request<T>(endpoint, {
+    method,
+    body,
+    headers: config?.headers,
+    query: config?.params,
+  }),
+  status: 200,
+});
 
-    if (maybeAxiosError.response?.status === 401) {
-      const loginUrl = maybeAxiosError.response.data?.login_url ?? null;
-      void onUnauthorized;
-      void loginUrl;
-    }
-
-    return Promise.reject(error);
-  },
-);
+const api = {
+  get: <T>(endpoint: string, config?: RequestConfig) => request<T>('GET', endpoint, undefined, config),
+  post: <T>(endpoint: string, body?: unknown, config?: RequestConfig) => request<T>('POST', endpoint, body, config),
+  put: <T>(endpoint: string, body?: unknown, config?: RequestConfig) => request<T>('PUT', endpoint, body, config),
+  delete: <T>(endpoint: string, config?: RequestConfig) => request<T>('DELETE', endpoint, undefined, config),
+};
 
 export function toApiError(error: unknown): ApiError {
-  const maybeAxiosError = error as {
-    response?: {
-      status?: number;
-      data?: {
-        error?: string;
-        message?: string;
-        login_url?: string;
-      };
-    };
-    message?: string;
-  };
-  const status = maybeAxiosError.response?.status ?? 500;
-  const message =
-    maybeAxiosError.response?.data?.error ||
-    maybeAxiosError.response?.data?.message ||
-    maybeAxiosError.message ||
-    "Backend request failed.";
+  if (error instanceof SharedApiError) {
+    return new ApiError(error.message, error.status, error.loginUrl ?? null);
+  }
 
-  return new ApiError(
-    message,
-    status,
-    maybeAxiosError.response?.data?.login_url ?? null,
-  );
+  return error instanceof ApiError
+    ? error
+    : new ApiError(error instanceof Error ? error.message : 'Backend request failed.', 500);
 }
 
 export default api;

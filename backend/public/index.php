@@ -51,7 +51,8 @@ try {
 } catch (\Throwable $exception) {
     header('HTTP/1.1 500 Internal Server Error');
     header('Content-Type: application/json');
-    echo json_encode(['success' => false, 'message' => $exception->getMessage()]);
+    error_log('Quiet Recall configuration error: ' . $exception->getMessage());
+    echo json_encode(['success' => false, 'message' => 'An unexpected server error occurred.']);
     exit(1);
 }
 
@@ -78,5 +79,6 @@ $routes($router);
 try {
     $router->handle();
 } catch (\Throwable $exception) {
-    (new Response())->error('Internal Server Error: ' . $exception->getMessage(), 500);
+    error_log('Quiet Recall unhandled exception: ' . $exception->getMessage());
+    (new Response())->error('An unexpected server error occurred.', 500);
 }
